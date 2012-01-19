@@ -15,4 +15,15 @@
         <version>0.1</version>
     </parent>
 
+    <!--
+     | dependencies
+     +-->
+    <dependencies>
+        <dependency>
+            <groupId>org.elasticsearch</groupId>
+            <artifactId>elasticsearch-omg</artifactId>
+            <version>0.1</version>
+        </dependency>
+    </dependencies>
+
 </project>

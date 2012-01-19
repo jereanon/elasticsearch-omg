@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:aop="http://www.springframework.org/schema/aop"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop-2.0.xsd">
+
+    <bean id="exampleBusinessProcess" class="com.elasticsearch.omg.samples.ExampleBusinessRunner" />
+
+    <beans profile="runtime-environment-test">
+        <bean class="com.elasticsearch.omg.support.springframework.ElasticSearchLocalClientFactory" />
+    </beans>
+
+    <beans profile="runtime-environment-normal">
+        <bean class="com.elasticsearch.omg.support.springframework.ElasticSearchTransportClientFactory">
+            <property name="addresses">
+                <map>
+                    <entry key="${es.url}" value="${es.port}"/>
+                </map>
+            </property>
+            <property name="sniffCluster" value="false"/>
+        </bean>
+    </beans>
+
+    <beans>
+        <bean name="abstractElasticSearchRepository"
+                class="com.elasticsearch.omg.support.repository.ElasticSearchRepository"
+                abstract="true">
+            <property name="bulkSize" value="50" />
+            <property name="indexName" value="${es.index}" />
+        </bean>
+
+    </beans>
+
+</beans>
