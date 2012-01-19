@@ -5,9 +5,15 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.elasticsearch</groupId>
-    <artifactId>elasticsearch-omg</artifactId>
+    <artifactId>elasticsearch-omg-parent</artifactId>
     <version>0.1</version>
-    <packaging>jar</packaging>
+    <packaging>pom</packaging>
+
+    <modules>
+        <module>elasticsearch-omg</module>
+        <module>integration-tests</module>
+        <module>samples</module>
+    </modules>
 
     <!--
      | properties
