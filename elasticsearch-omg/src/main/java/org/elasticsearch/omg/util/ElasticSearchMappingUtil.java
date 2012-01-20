@@ -1,15 +1,20 @@
 package org.elasticsearch.omg.util;
 
+import org.apache.commons.lang.StringUtils;
+import org.codehaus.jackson.map.ObjectMapper;
+import org.codehaus.jackson.node.ObjectNode;
+import org.elasticsearch.common.Nullable;
+import org.elasticsearch.omg.support.ElasticSearchDocument;
+import org.elasticsearch.omg.support.ElasticSearchDocumentId;
 import org.elasticsearch.omg.support.ElasticSearchProperty;
 import org.elasticsearch.omg.support.ElasticSearchPropertyType;
 import org.elasticsearch.omg.support.model.mapping.Mapping;
 import org.elasticsearch.omg.support.model.mapping.MappingProperty;
-import org.apache.commons.lang.StringUtils;
-import org.codehaus.jackson.map.ObjectMapper;
-import org.codehaus.jackson.node.ObjectNode;
 import org.springframework.beans.BeanUtils;
+import org.springframework.core.annotation.AnnotationUtils;
 
 import java.beans.PropertyDescriptor;
+import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
@@ -41,7 +46,9 @@ public class ElasticSearchMappingUtil {
      */
     public static Mapping createMappingForType(Class clazz) {
         Mapping mapping = new Mapping();
-        mapping.setMappingName(clazz.getName());
+        // grab the ElasticSearchDocument annotation, if it exists, otherwise use the simple name
+        String objectType = getObjectType(clazz);
+        mapping.setMappingName(objectType);
 
         // loop over each property and create the proper mapping
         PropertyDescriptor[] descriptors = BeanUtils.getPropertyDescriptors(clazz);
@@ -212,5 +219,39 @@ public class ElasticSearchMappingUtil {
                 }
             }
         }
+    }
+
+    /**
+     * Return the object type for a given object. The default object type is the simple class name.
+     *
+     * @param clazz the class
+     * @return the object type
+     */
+    public static String getObjectType(Class clazz) {
+        ElasticSearchDocument doc = AnnotationUtils.findAnnotation(clazz, ElasticSearchDocument.class);
+        return doc!=null
+                ? doc.typeName()
+                : clazz.getSimpleName();
+    }
+
+    /**
+     * Return the id of a given object.
+     *
+     * @param object the object
+     * @return the id for the object
+     */
+    @Nullable
+    public static String getId(Object object) {
+        for (Method method : object.getClass().getMethods()) {
+            ElasticSearchDocumentId docId = AnnotationUtils.findAnnotation(method, ElasticSearchDocumentId.class);
+            if (docId!=null) {
+                if (docId.autoGenerate()) {
+                    return null;
+                }
+
+                // TODO: return the invocation of the get method for the assocated property descriptor?
+            }
+        }
+        return null;
     }
 }

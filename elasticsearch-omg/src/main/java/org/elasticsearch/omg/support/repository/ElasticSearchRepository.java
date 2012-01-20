@@ -1,12 +1,5 @@
 package org.elasticsearch.omg.support.repository;
 
-import org.elasticsearch.omg.ElasticSearchOMGException;
-import org.elasticsearch.omg.support.model.Indexable;
-import org.elasticsearch.omg.support.model.query.ComplexQuery;
-import org.elasticsearch.omg.support.model.result.ElasticSearchResult;
-import org.elasticsearch.omg.support.model.result.ElasticSearchResults;
-import org.elasticsearch.omg.util.JSONUtil;
-import org.elasticsearch.omg.util.JavaBeanUtil;
 import org.elasticsearch.action.admin.indices.create.CreateIndexRequest;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.elasticsearch.action.admin.indices.exists.IndicesExistsRequest;
@@ -23,6 +16,13 @@ import org.elasticsearch.client.action.get.MultiGetRequestBuilder;
 import org.elasticsearch.client.action.search.SearchRequestBuilder;
 import org.elasticsearch.index.query.FilterBuilder;
 import org.elasticsearch.index.query.QueryBuilder;
+import org.elasticsearch.omg.ElasticSearchOMGException;
+import org.elasticsearch.omg.support.model.query.ComplexQuery;
+import org.elasticsearch.omg.support.model.result.ElasticSearchResult;
+import org.elasticsearch.omg.support.model.result.ElasticSearchResults;
+import org.elasticsearch.omg.util.ElasticSearchMappingUtil;
+import org.elasticsearch.omg.util.JSONUtil;
+import org.elasticsearch.omg.util.JavaBeanUtil;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.sort.SortBuilder;
 import org.slf4j.Logger;
@@ -36,7 +36,7 @@ import java.util.*;
  * Abstract class for any class implementing the repository design pattern to connect to elastic search
  */
 @Component
-public class ElasticSearchRepository<T extends Indexable> {
+public class ElasticSearchRepository<T> {
     private static final Logger logger = LoggerFactory.getLogger(ElasticSearchRepository.class);
 
     @Autowired
@@ -57,7 +57,9 @@ public class ElasticSearchRepository<T extends Indexable> {
         }
 
         String json = JSONUtil.serializeToString(object);
-        getClient().prepareIndex(indexName, object.getIndexObjectType(), object.getIndexableId())
+        String objectType = ElasticSearchMappingUtil.getObjectType(object.getClass());
+        String id = ElasticSearchMappingUtil.getId(object);
+        getClient().prepareIndex(indexName, objectType, id)
                 .setSource(json)
                 .setRefresh(true)
                 .execute()
@@ -86,12 +88,14 @@ public class ElasticSearchRepository<T extends Indexable> {
             }
             List<T> subObjects = objects.subList(i, toIndex);
             for (T object : subObjects) {
+                String objectType = ElasticSearchMappingUtil.getObjectType(object.getClass());
+                String id = ElasticSearchMappingUtil.getId(object);
                 try {
                     String json = JSONUtil.serializeToString(object);
-                    bulk.add(client.prepareIndex(indexName, object.getIndexObjectType()).setSource(json).setId(object.getIndexableId()));
+                    bulk.add(client.prepareIndex(indexName, objectType).setSource(json).setId(id));
                 } catch (ElasticSearchOMGException e) {
-                    logger.error("Error unmarshalling object and adding to bulk with ID: " + object.getIndexableId(), e);
-                    throw new ElasticSearchOMGException("Error unmarshalling object and adding to bulk with ID: " + object.getIndexableId(), e);
+                    logger.error("Error unmarshalling object and adding to bulk with ID: " + id, e);
+                    throw new ElasticSearchOMGException("Error unmarshalling object and adding to bulk with ID: " + id, e);
                 }
             }
 
@@ -186,7 +190,9 @@ public class ElasticSearchRepository<T extends Indexable> {
             return;
         }
 
-        getClient().prepareDelete(indexName, object.getIndexObjectType(), object.getIndexableId())
+        String objectType = ElasticSearchMappingUtil.getObjectType(object.getClass());
+        String id = ElasticSearchMappingUtil.getId(object);
+        getClient().prepareDelete(indexName, objectType, id)
                 .execute()
                 .actionGet();
     }
@@ -229,7 +235,9 @@ public class ElasticSearchRepository<T extends Indexable> {
             }
             List<T> subObjects = objects.subList(i, toIndex);
             for (T object : subObjects) {
-                bulk.add(client.prepareDelete(indexName, object.getIndexObjectType(), object.getIndexableId()));
+                String objectType = ElasticSearchMappingUtil.getObjectType(object.getClass());
+                String id = ElasticSearchMappingUtil.getId(object);
+                bulk.add(client.prepareDelete(indexName, objectType, id));
             }
 
             bulk.execute().actionGet();
@@ -384,6 +392,22 @@ public class ElasticSearchRepository<T extends Indexable> {
         putMapping.source(json);
         putMapping.type(type);
         client.admin().indices().putMapping(putMapping).actionGet();
+    }
+
+    /**
+     * Create the mapping for a given class.
+     *
+     * @param clazz the class
+     */
+    public void createMapping(Class clazz) {
+        try {
+            String json = ElasticSearchMappingUtil.createJSONStringForType(clazz);
+            String objectType = ElasticSearchMappingUtil.getObjectType(clazz);
+            createMapping(objectType, json);
+        } catch (Exception ex) {
+            throw new ElasticSearchOMGException("Exception creating mapping for type: "
+                    +clazz.getSimpleName());
+        }
     }
 
     /**

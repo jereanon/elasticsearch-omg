@@ -1,33 +1,29 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <beans xmlns="http://www.springframework.org/schema/beans"
-       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:aop="http://www.springframework.org/schema/aop"
-       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop-2.0.xsd">
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:context="http://www.springframework.org/schema/context"
+    xsi:schemaLocation="
+        http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-2.5.xsd
+        http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-2.5.xsd">
+
+    <context:annotation-config/>
 
     <bean id="exampleBusinessProcess" class="org.elasticsearch.omg.samples.ExampleBusinessRunner" />
+    <bean class="org.elasticsearch.omg.support.springframework.ElasticSearchLocalClientFactory" />
+    <bean name="abstractElasticSearchRepository"
+            class="org.elasticsearch.omg.support.repository.ElasticSearchRepository">
+        <property name="bulkSize" value="50" />
+        <property name="indexName" value="testing" />
+    </bean>
 
-    <beans profile="runtime-environment-test">
-        <bean class="org.elasticsearch.omg.support.springframework.ElasticSearchLocalClientFactory" />
-    </beans>
-
-    <beans profile="runtime-environment-normal">
-        <bean class="org.elasticsearch.omg.support.springframework.ElasticSearchTransportClientFactory">
-            <property name="addresses">
-                <map>
-                    <entry key="${es.url}" value="${es.port}"/>
-                </map>
-            </property>
-            <property name="sniffCluster" value="false"/>
-        </bean>
-    </beans>
-
-    <beans>
-        <bean name="abstractElasticSearchRepository"
-                class="org.elasticsearch.omg.support.repository.ElasticSearchRepository"
-                abstract="true">
-            <property name="bulkSize" value="50" />
-            <property name="indexName" value="${es.index}" />
-        </bean>
-
-    </beans>
-
+    <!--
+    <bean class="org.elasticsearch.omg.support.springframework.ElasticSearchTransportClientFactory">
+        <property name="addresses">
+            <map>
+                <entry key="${es.url}" value="${es.port}"/>
+            </map>
+        </property>
+        <property name="sniffCluster" value="false"/>
+    </bean>
+    -->
 </beans>

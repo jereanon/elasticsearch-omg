@@ -21,6 +21,8 @@ public enum ElasticSearchPropertyType {
 
     NULL("null"),
 
+    DATE("date"),
+
     /* other types */
     MULTI_FIELD("multi_field");
 

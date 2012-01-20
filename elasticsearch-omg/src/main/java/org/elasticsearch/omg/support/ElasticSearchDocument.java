@@ -1,11 +1,16 @@
 package org.elasticsearch.omg.support;
 
+import java.lang.annotation.*;
+
 /**
  * Annotates a class to be stored as a document in elasticsearch.
  * 
  * @author jereanon
  * @author pchapman
  */
+@Documented
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
 public @interface ElasticSearchDocument {
     /**
      * The name of documents of this type.  Not to be confused with field
