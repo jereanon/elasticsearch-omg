@@ -19,6 +19,11 @@ import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.WeakHashMap;
+import org.elasticsearch.omg.ElasticSearchOMGException;
+import org.elasticsearch.omg.support.*;
+import org.elasticsearch.omg.support.index.IndexNameStrategy;
 
 /**
  * Utilities related to creating an elastic search mapping.
@@ -254,4 +259,56 @@ public class ElasticSearchMappingUtil {
         }
         return null;
     }
+    
+    /**
+     * Returns the name of the index as provided in the document annotation.
+     * 
+     * @param object The object being indexed.
+     * @return The name of the index to store the object into.
+     */
+    public static String getIndexName(Object object) {
+        return getIndexName(object.getClass());
+    }
+    
+    /**
+     * Returns the name of the index as provided in the document annotation.
+     * 
+     * @param object The class of object being indexed.
+     * @return The name of the index to store the object into.
+     */
+    public static String getIndexName(Class<?> clazz) {
+        ElasticSearchIndex index = AnnotationUtils.findAnnotation(clazz, ElasticSearchIndex.class);
+        IndexNameStrategy strategy = getIndexNameStrategy(index.strategy());
+        return strategy.indexFor(clazz);
+    }
+    
+    /**
+     * Returns an IndexNameStrategy instance based on fully qualified class name.
+     * The instance is lazily instantiated and then held in cache.
+     * 
+     * @throws ElasticSearchOMGException Indicates an error instantiating the
+     *                                   strategy.
+     */
+    private static IndexNameStrategy getIndexNameStrategy(String strategyClassName)
+            throws ElasticSearchOMGException
+    {
+        IndexNameStrategy strategy = indexNameStrategies.get(strategyClassName);
+        if (strategy == null) {
+            try {
+                Class<IndexNameStrategy> clazz = (Class<IndexNameStrategy>)ElasticSearchMappingUtil.class.getClassLoader().loadClass(strategyClassName);
+                strategy = clazz.newInstance();
+            } catch (Exception e) {
+                throw new ElasticSearchOMGException("Unable to load index name strategy instance for " + strategyClassName, e);
+            }
+            indexNameStrategies.put(strategyClassName, strategy);
+        }
+        return strategy;
+    }
+    
+    /**
+     * A weakly held map of instances of IndexNameStrategy by fully qualified
+     * class name.
+     */
+    private static final Map<String, IndexNameStrategy> indexNameStrategies
+            = new WeakHashMap<String, IndexNameStrategy>();
 }

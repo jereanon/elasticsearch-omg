@@ -13,7 +13,6 @@
     <bean name="abstractElasticSearchRepository"
             class="org.elasticsearch.omg.support.repository.ElasticSearchRepository">
         <property name="bulkSize" value="50" />
-        <property name="indexName" value="testing" />
     </bean>
 
     <!--

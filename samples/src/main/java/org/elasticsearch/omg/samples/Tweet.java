@@ -7,10 +7,12 @@ import org.elasticsearch.omg.support.ElasticSearchProperty;
 import org.elasticsearch.omg.support.ElasticSearchPropertyType;
 
 import java.util.Date;
+import org.elasticsearch.omg.support.ElasticSearchIndex;
 
 /**
  * an individual tweet!
  */
+@ElasticSearchIndex(name = "tweets")
 @ElasticSearchDocument(typeName = "tweet")
 public class Tweet {
 

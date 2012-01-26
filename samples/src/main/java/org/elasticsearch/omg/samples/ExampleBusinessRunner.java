@@ -29,7 +29,7 @@ public class ExampleBusinessRunner {
         // create an in memory index and index some things
         Map<String, String> settings = new HashMap<String, String>();
         settings.put("es.index.storage.type", "memory");
-        esRepo.createIndex(settings);
+        esRepo.createIndex(Tweet.class, settings);
         esRepo.createMapping(Tweet.class);
         esRepo.indexObjects(tweets);
 
@@ -42,7 +42,7 @@ public class ExampleBusinessRunner {
             System.out.println("dog tweet: "+tweet.toString());
         }
 
-        esRepo.deleteIndex();
+        esRepo.deleteIndex(Tweet.class);
     }
 
     /**
