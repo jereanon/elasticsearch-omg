@@ -6,6 +6,7 @@
 
     <groupId>org.elasticsearch</groupId>
     <artifactId>elasticsearch-omg-samples</artifactId>
+    <name>ElasticSearch OMG - Samples</name>
     <version>0.1</version>
     <packaging>jar</packaging>
 
@@ -20,9 +21,8 @@
      +-->
     <dependencies>
         <dependency>
-            <groupId>org.elasticsearch</groupId>
+            <groupId>${project.groupId}</groupId>
             <artifactId>elasticsearch-omg</artifactId>
-            <version>0.1</version>
         </dependency>
     </dependencies>
 
