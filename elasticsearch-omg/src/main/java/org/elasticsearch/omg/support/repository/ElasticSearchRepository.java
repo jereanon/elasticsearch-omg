@@ -153,12 +153,12 @@ public class ElasticSearchRepository<T> {
      * @return the object, if found
      * @throws ElasticSearchOMGException on error
      */
-    public T getObject(Class<T> clazz, String id) throws ElasticSearchOMGException {
+    public <T> T getObject(Class<T> clazz, String id) throws ElasticSearchOMGException {
         String indexName = ElasticSearchMappingUtil.getIndexName(clazz);
         GetResponse response = getClient().prepareGet(indexName, null, id)
                 .execute()
                 .actionGet();
-        return getObjectFromResponse(response);
+        return (T)getObjectFromResponse(response);
     }
 
     /**
@@ -169,7 +169,7 @@ public class ElasticSearchRepository<T> {
      * @return the objects, if found
      * @throws ElasticSearchOMGException on error
      */
-    public List<T> getObjects(Class<T> clazz, String... ids) throws ElasticSearchOMGException {
+    public <T> List<T> getObjects(Class<T> clazz, String... ids) throws ElasticSearchOMGException {
         String indexName = ElasticSearchMappingUtil.getIndexName(clazz);
         MultiGetRequestBuilder request = getClient().prepareMultiGet();
         for (String id : ids) {
@@ -177,7 +177,7 @@ public class ElasticSearchRepository<T> {
         }
         try {
             MultiGetResponse response = request.execute().actionGet();
-            return getObjectsFromResponse(response);
+            return (List<T>) getObjectsFromResponse(response);
         } catch (Exception e) {
             // TODO: this seems to have changed in newer versions of ES, previously I believe ES returned the equivalent of a map of ID -> (exists: false, source: null)
             throw new ElasticSearchOMGException("Error executing multiget for IDs: " + ids, e);
