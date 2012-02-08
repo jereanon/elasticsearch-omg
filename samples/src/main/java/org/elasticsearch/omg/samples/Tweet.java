@@ -8,12 +8,14 @@ import org.elasticsearch.omg.support.ElasticSearchPropertyType;
 
 import java.util.Date;
 import org.elasticsearch.omg.support.ElasticSearchIndex;
+import org.elasticsearch.omg.support.springframework.ManagedByRepository;
 
 /**
  * an individual tweet!
  */
 @ElasticSearchIndex(name = "tweets")
 @ElasticSearchDocument(typeName = "tweet")
+@ManagedByRepository(beanName="tweetRepo")
 public class Tweet {
 
     private Long id;

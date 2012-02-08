@@ -4,25 +4,16 @@
     xmlns:context="http://www.springframework.org/schema/context"
     xsi:schemaLocation="
         http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-2.5.xsd
-        http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-2.5.xsd">
+        http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-2.5.xsd
+       http://www.springframework.org/schema/cache http://www.springframework.org/schema/cache/spring-cache-3.1.xsd" xmlns:cache="http://www.springframework.org/schema/cache">
 
     <context:annotation-config/>
 
+    <bean id="esClientFactory"  class="org.elasticsearch.omg.support.springframework.ElasticSearchLocalClientFactory" />
+    <!-- handels @ManagedByRepository annotations and creates ElasticSearchRepository singletons -->
+    <bean id="repositorySingletonCreator" class="org.elasticsearch.omg.support.springframework.ElasticSearchRepositoryBeanRegistry">
+        <property name="bulkSize" value="50"/>
+        <property name="scanPath" value="org.elasticsearch.omg.samples"/>
+    </bean>
     <bean id="exampleBusinessProcess" class="org.elasticsearch.omg.samples.ExampleBusinessRunner" />
-    <bean class="org.elasticsearch.omg.support.springframework.ElasticSearchLocalClientFactory" />
-    <bean name="abstractElasticSearchRepository"
-            class="org.elasticsearch.omg.support.repository.ElasticSearchRepository">
-        <property name="bulkSize" value="50" />
-    </bean>
-
-    <!--
-    <bean class="org.elasticsearch.omg.support.springframework.ElasticSearchTransportClientFactory">
-        <property name="addresses">
-            <map>
-                <entry key="${es.url}" value="${es.port}"/>
-            </map>
-        </property>
-        <property name="sniffCluster" value="false"/>
-    </bean>
-    -->
 </beans>

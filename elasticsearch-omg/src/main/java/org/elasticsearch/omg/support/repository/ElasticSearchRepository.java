@@ -22,7 +22,6 @@ import org.elasticsearch.omg.support.model.result.ElasticSearchResult;
 import org.elasticsearch.omg.support.model.result.ElasticSearchResults;
 import org.elasticsearch.omg.util.ElasticSearchMappingUtil;
 import org.elasticsearch.omg.util.JSONUtil;
-import org.elasticsearch.omg.util.JavaBeanUtil;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.sort.SortBuilder;
 import org.slf4j.Logger;
@@ -39,13 +38,31 @@ import java.util.*;
  * @author pchapman
  */
 @Component
-public class ElasticSearchRepository<T> {
+public final class ElasticSearchRepository<T> {
     private static final Logger logger = LoggerFactory.getLogger(ElasticSearchRepository.class);
 
     @Autowired
-    protected Client client;
+    private Client client;
+    
+    private Integer bulkSize;
+    
+    private String indexName;
+    
+    private String objectType;
 
-    protected Integer bulkSize;
+    private Class<T> storedClass;
+    
+    public ElasticSearchRepository(Class<T> storedClass, Client client, Integer bulkSize) {
+        this.bulkSize = bulkSize;
+        this.client = client;
+        this.storedClass = storedClass;
+        indexName = ElasticSearchMappingUtil.getIndexName(storedClass);
+        objectType = ElasticSearchMappingUtil.getObjectType(storedClass);
+    }
+    
+    public ElasticSearchRepository(String storedClassName, Client client, Integer bulkSize) throws ClassNotFoundException {
+        this(((Class<T>)Class.forName(storedClassName)), client, bulkSize);
+    }
 
     /**
      * Indexes a single object into elastic search
@@ -59,9 +76,7 @@ public class ElasticSearchRepository<T> {
         }
 
         String json = JSONUtil.serializeToString(object);
-        String objectType = ElasticSearchMappingUtil.getObjectType(object.getClass());
         String id = ElasticSearchMappingUtil.getId(object);
-        String indexName = ElasticSearchMappingUtil.getIndexName(object);
         getClient().prepareIndex(indexName, objectType, id)
                 .setSource(json)
                 .setRefresh(true)
@@ -76,45 +91,10 @@ public class ElasticSearchRepository<T> {
      * @throws ElasticSearchOMGException on error
      */
     public void indexObjects(List<T> objects) throws ElasticSearchOMGException {
-        // Coallate objects by index in case there is a mix of objects on
-        // different indexes.
-        Map<String, List<T>> objectsByIndex = new HashMap<String, List<T>>();
-        List<T> stuff;
-        String index;
-        String lastIndex = null;
-        for (T o : objects) {
-            index = ElasticSearchMappingUtil.getIndexName(o.getClass());
-            // Most likely they're all one type and/or one index.  Do the
-            // following check against last index to cut down on accessing the
-            // map and checking list for lazy load.
-            if (!index.equals(lastIndex)) {
-                stuff = objectsByIndex.get(index);
-                if (stuff == null) {
-                    stuff = new LinkedList<T>();
-                    objectsByIndex.put(index, stuff);
-                }
-                stuff.add(o);
-                lastIndex = index;
-            }
-        }
-        for (String indexName : objectsByIndex.keySet()) {
-            indexObjects(indexName, objectsByIndex.get(indexName));
-        }
-    }
-    
-    /**
-     * Indexes a list of objects into elastic search
-     *
-     * @param indexName the name of the index to store the objects into
-     * @param objects the objects to index
-     * @throws ElasticSearchOMGException on error
-     */
-    private void indexObjects(String indexName, List<T> objects) throws ElasticSearchOMGException {
         if (objects == null || objects.isEmpty()) {
             return;
         }
 
-        Client client = getClient();
         // TODO: this loop can run with 0 items in the subobjects list occasionally, fix it.
         for (int i = 0; i <= objects.size(); i += bulkSize) {
             BulkRequestBuilder bulk = client.prepareBulk().setRefresh(true);
@@ -125,7 +105,6 @@ public class ElasticSearchRepository<T> {
             }
             List<T> subObjects = objects.subList(i, toIndex);
             for (T object : subObjects) {
-                String objectType = ElasticSearchMappingUtil.getObjectType(object.getClass());
                 String id = ElasticSearchMappingUtil.getId(object);
                 try {
                     String json = JSONUtil.serializeToString(object);
@@ -153,9 +132,9 @@ public class ElasticSearchRepository<T> {
      * @return the object, if found
      * @throws ElasticSearchOMGException on error
      */
-    public <T> T getObject(Class<T> clazz, String id) throws ElasticSearchOMGException {
-        String indexName = ElasticSearchMappingUtil.getIndexName(clazz);
-        GetResponse response = getClient().prepareGet(indexName, null, id)
+    public <T> T getObject(String id) throws ElasticSearchOMGException {
+        //TODO Get document type from class definition?  What about ID collisions among document types?
+        GetResponse response = getClient().prepareGet(indexName, objectType, id)
                 .execute()
                 .actionGet();
         return (T)getObjectFromResponse(response);
@@ -169,11 +148,11 @@ public class ElasticSearchRepository<T> {
      * @return the objects, if found
      * @throws ElasticSearchOMGException on error
      */
-    public <T> List<T> getObjects(Class<T> clazz, String... ids) throws ElasticSearchOMGException {
-        String indexName = ElasticSearchMappingUtil.getIndexName(clazz);
+    public List<T> getObjects(String... ids) throws ElasticSearchOMGException {
         MultiGetRequestBuilder request = getClient().prepareMultiGet();
         for (String id : ids) {
-            request.add(indexName, null, id);
+            //TODO Get document type from class definition?  What about ID collisions among document types?
+            request.add(indexName, objectType, id);
         }
         try {
             MultiGetResponse response = request.execute().actionGet();
@@ -196,8 +175,7 @@ public class ElasticSearchRepository<T> {
 
         for (MultiGetItemResponse item : response.responses()) {
             if (item.getResponse().exists()) {
-                Class<T> klass = getClassForType(item.getType());
-                T object = (T) JSONUtil.deserializeToObject(item.getResponse().sourceAsString(), klass);
+                T object = (T) JSONUtil.deserializeToObject(item.getResponse().sourceAsString(), storedClass);
                 results.add(object);
             }
         }
@@ -216,8 +194,7 @@ public class ElasticSearchRepository<T> {
             return null;
         }
 
-        Class<T> klass = getClassForType(response.getType());
-        return (T) JSONUtil.deserializeToObject(response.sourceAsString(), klass);
+        return (T) JSONUtil.deserializeToObject(response.sourceAsString(), storedClass);
     }
 
     /**
@@ -231,9 +208,7 @@ public class ElasticSearchRepository<T> {
             return;
         }
 
-        String objectType = ElasticSearchMappingUtil.getObjectType(object.getClass());
         String id = ElasticSearchMappingUtil.getId(object);
-        String indexName = ElasticSearchMappingUtil.getIndexName(object);
         getClient().prepareDelete(indexName, objectType, id)
                 .execute()
                 .actionGet();
@@ -245,7 +220,7 @@ public class ElasticSearchRepository<T> {
      * @param queryBuilder the query
      */
     //TODO is requesting indexName the right thing to do?
-    public void deleteByQuery(String indexName, QueryBuilder queryBuilder) {
+    public void deleteByQuery(QueryBuilder queryBuilder) {
         if (queryBuilder == null) {
             return;
         }
@@ -265,37 +240,10 @@ public class ElasticSearchRepository<T> {
      * @throws ElasticSearchOMGException on error
      */
     public void deleteObjects(List<T> objects) throws ElasticSearchOMGException {
-        // Coallate objects by index in case there is a mix of objects on
-        // different indexes.
-        Map<String, List<T>> objectsByIndex = new HashMap<String, List<T>>();
-        List<T> stuff;
-        String index;
-        String lastIndex = null;
-        for (T o : objects) {
-            index = ElasticSearchMappingUtil.getIndexName(o.getClass());
-            // Most likely they're all one type and/or one index.  Do the
-            // following check against last index to cut down on accessing the
-            // map and checking list for lazy load.
-            if (!index.equals(lastIndex)) {
-                stuff = objectsByIndex.get(index);
-                if (stuff == null) {
-                    stuff = new LinkedList<T>();
-                    objectsByIndex.put(index, stuff);
-                }
-                stuff.add(o);
-            }
-        }
-        for (String indexName : objectsByIndex.keySet()) {
-            deleteObjects(indexName, objectsByIndex.get(indexName));
-        }
-    }
-    
-    private void deleteObjects(String indexName, List<T> objects) throws ElasticSearchOMGException {
         if (objects == null || objects.isEmpty()) {
             return;
         }
 
-        Client client = getClient();
         for (int i = 0; i <= objects.size(); i += bulkSize) {
             BulkRequestBuilder bulk = client.prepareBulk();
 
@@ -305,7 +253,6 @@ public class ElasticSearchRepository<T> {
             }
             List<T> subObjects = objects.subList(i, toIndex);
             for (T object : subObjects) {
-                String objectType = ElasticSearchMappingUtil.getObjectType(object.getClass());
                 String id = ElasticSearchMappingUtil.getId(object);
                 bulk.add(client.prepareDelete(indexName, objectType, id));
             }
@@ -321,15 +268,12 @@ public class ElasticSearchRepository<T> {
      * @param query   the query to apply to the search
      * @param filter  a filter to apply to the query
      * @param sort    sorting criteria to apply to the search results
-     * @param classes the classes to search for
      * @return the search
      */
-    protected SearchRequestBuilder prepareSearch(QueryBuilder query, FilterBuilder filter, SortBuilder sort, Class... classes) {
-        String[] objectTypes = getObjectTypes(classes);
-        String[] indexes = getIndexes(classes);
+    protected SearchRequestBuilder prepareSearch(QueryBuilder query, FilterBuilder filter, SortBuilder sort) {
 
-        SearchRequestBuilder search = getClient().prepareSearch(indexes)
-                .setTypes(objectTypes)
+        SearchRequestBuilder search = getClient().prepareSearch(indexName)
+                .setTypes(objectType)
                 .setSearchType(SearchType.QUERY_THEN_FETCH);
 
         if (query != null) {
@@ -352,22 +296,21 @@ public class ElasticSearchRepository<T> {
      * @param classes the classes to allow in the query
      * @return the search request
      */
-    protected SearchRequestBuilder prepareSearch(QueryBuilder query, Class... classes) {
-        return prepareSearch(query, null, null, classes);
+    protected SearchRequestBuilder prepareSearch(QueryBuilder query) {
+        return prepareSearch(query, null, null);
     }
 
     /**
      * Executes a search for objects based on the provided criteria
      *
      * @param search the query to execute
-     * @param types  the types to search on
      * @return the search result
      * @throws ElasticSearchOMGException on error
      */
-    protected ElasticSearchResults<T> executeSearch(SearchRequestBuilder search, Class... types) throws ElasticSearchOMGException {
+    protected ElasticSearchResults<T> executeSearch(SearchRequestBuilder search) throws ElasticSearchOMGException {
         SearchResponse response = search.execute().actionGet();
         ElasticSearchResults<T> result = new ElasticSearchResults<T>();
-        Collection<ElasticSearchResult<T>> results = getObjectsFromResponse(response, types);
+        Collection<ElasticSearchResult<T>> results = getObjectsFromResponse(response);
         result.setResults(results);
         result.setTotalResults(response.getHits().getTotalHits());
         return result;
@@ -381,11 +324,10 @@ public class ElasticSearchRepository<T> {
      * @throws ElasticSearchOMGException on error
      */
     public ElasticSearchResults<T> executeSearch(ComplexQuery query) throws ElasticSearchOMGException {
-        Set<Class<? extends Class>> classes = JavaBeanUtil.getClasses(query.getClassNames().toArray(new String[0]));
-        SearchRequestBuilder search = prepareSearch(query.getBoolQueryBuilder(), query.getBoolFilterBuilder(), query.getSortBuilder(), classes.toArray(new Class[0]));
+        SearchRequestBuilder search = prepareSearch(query.getBoolQueryBuilder(), query.getBoolFilterBuilder(), query.getSortBuilder());
         SearchResponse response = search.execute().actionGet();
         ElasticSearchResults<T> result = new ElasticSearchResults<T>();
-        Collection<ElasticSearchResult<T>> results = getObjectsFromResponse(response, classes.toArray(new Class[0]));
+        Collection<ElasticSearchResult<T>> results = getObjectsFromResponse(response);
         result.setResults(results);
         result.setTotalResults(response.getHits().getTotalHits());
         return result;
@@ -399,7 +341,7 @@ public class ElasticSearchRepository<T> {
      * @return the list of unmarshalled objects
      * @throws ElasticSearchOMGException on error
      */
-    protected Collection<ElasticSearchResult<T>> getObjectsFromResponse(SearchResponse response, Collection<Class> classes) throws ElasticSearchOMGException {
+    protected Collection<ElasticSearchResult<T>> getObjectsFromResponse(SearchResponse response) throws ElasticSearchOMGException {
         List<ElasticSearchResult<T>> results = new ArrayList<ElasticSearchResult<T>>();
 
         if (response.hits() == null || response.hits().totalHits() == 0) {
@@ -408,13 +350,8 @@ public class ElasticSearchRepository<T> {
 
         for (SearchHit hit : response.hits().getHits()) {
             try {
-                Class<T> klass = getClassForType(hit.getType());
-                if (klass == null || (classes != null && !classes.contains(klass))) {
-                    logger.error("Class not configured for object type: " + hit.getType());
-                    throw new ElasticSearchOMGException("Class not configured for object type: " + hit.getType());
-                }
-                T object = (T) JSONUtil.deserializeToObject(hit.sourceAsString(), klass);
-                results.add(new ElasticSearchResult<T>(object, klass, hit.getScore()));
+                T object = (T) JSONUtil.deserializeToObject(hit.sourceAsString(), storedClass);
+                results.add(new ElasticSearchResult<T>(object, storedClass, hit.getScore()));
             } catch (ElasticSearchOMGException ex) {
                 logger.error("Error unmarshalling result", ex);
                 throw new ElasticSearchOMGException("Error unmarshalling result. ID: " + hit.getId() + " , type: " + hit.getType(), ex);
@@ -426,9 +363,8 @@ public class ElasticSearchRepository<T> {
     /**
      * Create an index.
      */
-    public void createIndex(Class<?> persistedClass) {
-        String indexName = ElasticSearchMappingUtil.getIndexName(persistedClass);
-        if (indexExists(indexName)) {
+    public void createIndex() {
+        if (indexExists()) {
             logger.warn("Attemping to create index: "+indexName+" that already exists.");
             return;
         }
@@ -442,9 +378,8 @@ public class ElasticSearchRepository<T> {
      *
      * @param settings extra settings for this index creation
      */
-    public void createIndex(Class<?> persistedClass, Map<String, String> settings) {
-        String indexName = ElasticSearchMappingUtil.getIndexName(persistedClass);
-        if (indexExists(indexName)) {
+    public void createIndex(Map<String, String> settings) {
+        if (indexExists()) {
             logger.warn("Attemping to create index: "+indexName+" that already exists.");
             return;
         }
@@ -459,7 +394,7 @@ public class ElasticSearchRepository<T> {
      *
      * @param json the json for the mapping
      */
-    public void createMapping(String indexName, String type, String json) {
+    protected void createMapping(String type, String json) {
         logger.debug("Elastic Search creating mapping with contents: "+json);
         PutMappingRequest putMapping = new PutMappingRequest(indexName);
         putMapping.source(json);
@@ -472,27 +407,26 @@ public class ElasticSearchRepository<T> {
      *
      * @param clazz the class
      */
-    public void createMapping(Class<?> clazz) {
+    public void createMapping() {
         try {
-            String json = ElasticSearchMappingUtil.createJSONStringForType(clazz);
-            String objectType = ElasticSearchMappingUtil.getObjectType(clazz);
-            String indexName = ElasticSearchMappingUtil.getIndexName(clazz);
-            createMapping(indexName, objectType, json);
+            String json = ElasticSearchMappingUtil.createJSONStringForType(storedClass);
+            createMapping(objectType, json);
         } catch (Exception ex) {
             throw new ElasticSearchOMGException("Exception creating mapping for type: "
-                    +clazz.getSimpleName());
+                    +storedClass.getSimpleName());
         }
     }
 
     /**
      * Delete the index.
      */
-    public void deleteIndex(Class<?> persistedClass) {
-        deleteIndex(ElasticSearchMappingUtil.getIndexName(persistedClass));
-    }
-    private void deleteIndex(String indexName) {
-        DeleteIndexRequest deleteIndexRequest = new DeleteIndexRequest(indexName);
-        client.admin().indices().delete(deleteIndexRequest).actionGet();
+    public void deleteIndex() {
+        if (indexExists()) {
+            DeleteIndexRequest deleteIndexRequest = new DeleteIndexRequest(indexName);
+            client.admin().indices().delete(deleteIndexRequest).actionGet();
+        } else {
+            logger.warn("Asked to delete an index that doesn't exist: {}", indexName);
+        }
     }
 
     /**
@@ -500,24 +434,9 @@ public class ElasticSearchRepository<T> {
      * 
      * @return true if the index exists, false otherwise
      */
-    public boolean indexExists(Class<?> persistedClass) {
-        return indexExists(ElasticSearchMappingUtil.getIndexName(persistedClass));
-    }
-    private boolean indexExists(String indexName) {
+    public boolean indexExists() {
         IndicesExistsRequest indicesExistsRequest = new IndicesExistsRequest(indexName);
         return client.admin().indices().exists(indicesExistsRequest).actionGet().exists();
-    }
-
-    /**
-     * Convenience method
-     *
-     * @param response the response to get objects out of
-     * @param types    the types to marshall to
-     * @return the collection of results
-     * @throws ElasticSearchOMGException on error
-     */
-    protected Collection<ElasticSearchResult<T>> getObjectsFromResponse(SearchResponse response, Class... types) throws ElasticSearchOMGException {
-        return getObjectsFromResponse(response, Arrays.asList(types));
     }
 
     /**
@@ -525,12 +444,11 @@ public class ElasticSearchRepository<T> {
      *
      * @param client the client
      */
-    public void setClient(Client client) {
-        this.client = client;
-    }
-
     public Client getClient() {
         return client;
+    }
+    public void setClient(Client client) {
+        this.client = client;
     }
 
     /**

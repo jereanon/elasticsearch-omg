@@ -10,7 +10,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Class for running examples.
@@ -19,8 +24,8 @@ import java.util.*;
 public class ExampleBusinessRunner {
 
     @Autowired
-    @Qualifier("abstractElasticSearchRepository")
-    private ElasticSearchRepository esRepo;
+    @Qualifier("tweetRepo")
+    private ElasticSearchRepository<Tweet> esRepo;
 
     public void doBusiness() {
         // do stuffs
@@ -29,8 +34,9 @@ public class ExampleBusinessRunner {
         // create an in memory index and index some things
         Map<String, String> settings = new HashMap<String, String>();
         settings.put("es.index.storage.type", "memory");
-        esRepo.createIndex(Tweet.class, settings);
-        esRepo.createMapping(Tweet.class);
+        esRepo.deleteIndex(); // In case a previous run created it
+        esRepo.createIndex(settings);
+        esRepo.createMapping();
         esRepo.indexObjects(tweets);
 
         // query for dog tweets
@@ -42,7 +48,7 @@ public class ExampleBusinessRunner {
             System.out.println("dog tweet: "+tweet.toString());
         }
 
-        esRepo.deleteIndex(Tweet.class);
+        esRepo.deleteIndex();
     }
 
     /**
