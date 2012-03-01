@@ -10,12 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Class for running examples.
@@ -45,7 +40,7 @@ public class ExampleBusinessRunner {
         }};
         ElasticSearchResults<Tweet> retDogTweets = esRepo.executeSearch(dogQuery);
         for (ElasticSearchResult<Tweet> tweet : retDogTweets.getResults()) {
-            System.out.println("dog tweet: "+tweet.toString());
+            System.out.println("dog tweet: "+tweet.getResult().getMessage());
         }
 
         esRepo.deleteIndex();

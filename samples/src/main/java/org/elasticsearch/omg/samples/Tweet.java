@@ -1,14 +1,10 @@
 package org.elasticsearch.omg.samples;
 
-import org.elasticsearch.common.jackson.annotate.JsonIgnore;
-import org.elasticsearch.omg.support.ElasticSearchDocument;
-import org.elasticsearch.omg.support.ElasticSearchDocumentId;
-import org.elasticsearch.omg.support.ElasticSearchProperty;
-import org.elasticsearch.omg.support.ElasticSearchPropertyType;
+import org.codehaus.jackson.annotate.JsonIgnore;
+import org.elasticsearch.omg.support.*;
+import org.elasticsearch.omg.support.springframework.ManagedByRepository;
 
 import java.util.Date;
-import org.elasticsearch.omg.support.ElasticSearchIndex;
-import org.elasticsearch.omg.support.springframework.ManagedByRepository;
 
 /**
  * an individual tweet!

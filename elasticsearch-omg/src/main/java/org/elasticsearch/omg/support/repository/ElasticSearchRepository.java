@@ -4,19 +4,20 @@ import org.elasticsearch.action.admin.indices.create.CreateIndexRequest;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.elasticsearch.action.admin.indices.exists.IndicesExistsRequest;
 import org.elasticsearch.action.admin.indices.mapping.put.PutMappingRequest;
+import org.elasticsearch.action.bulk.BulkRequestBuilder;
+import org.elasticsearch.action.deletebyquery.DeleteByQueryRequestBuilder;
 import org.elasticsearch.action.get.GetResponse;
 import org.elasticsearch.action.get.MultiGetItemResponse;
+import org.elasticsearch.action.get.MultiGetRequestBuilder;
 import org.elasticsearch.action.get.MultiGetResponse;
+import org.elasticsearch.action.search.SearchRequestBuilder;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.client.Client;
-import org.elasticsearch.client.action.bulk.BulkRequestBuilder;
-import org.elasticsearch.client.action.deletebyquery.DeleteByQueryRequestBuilder;
-import org.elasticsearch.client.action.get.MultiGetRequestBuilder;
-import org.elasticsearch.client.action.search.SearchRequestBuilder;
 import org.elasticsearch.index.query.FilterBuilder;
 import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.omg.ElasticSearchOMGException;
+import org.elasticsearch.omg.support.ElasticSearchDocumentId;
 import org.elasticsearch.omg.support.model.query.ComplexQuery;
 import org.elasticsearch.omg.support.model.result.ElasticSearchResult;
 import org.elasticsearch.omg.support.model.result.ElasticSearchResults;
@@ -29,6 +30,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.lang.reflect.Method;
 import java.util.*;
 
 /**
@@ -76,7 +78,7 @@ public final class ElasticSearchRepository<T> {
         }
 
         String json = JSONUtil.serializeToString(object);
-        String id = ElasticSearchMappingUtil.getId(object);
+        String id = getNextId(object.getClass());
         getClient().prepareIndex(indexName, objectType, id)
                 .setSource(json)
                 .setRefresh(true)
@@ -95,7 +97,6 @@ public final class ElasticSearchRepository<T> {
             return;
         }
 
-        // TODO: this loop can run with 0 items in the subobjects list occasionally, fix it.
         for (int i = 0; i <= objects.size(); i += bulkSize) {
             BulkRequestBuilder bulk = client.prepareBulk().setRefresh(true);
 
@@ -105,7 +106,7 @@ public final class ElasticSearchRepository<T> {
             }
             List<T> subObjects = objects.subList(i, toIndex);
             for (T object : subObjects) {
-                String id = ElasticSearchMappingUtil.getId(object);
+                String id = getNextId(object.getClass());
                 try {
                     String json = JSONUtil.serializeToString(object);
                     bulk.add(client.prepareIndex(indexName, objectType).setSource(json).setId(id));
@@ -116,7 +117,7 @@ public final class ElasticSearchRepository<T> {
             }
 
             if (!subObjects.isEmpty()) {
-                logger.debug("executing bulk index request: "+bulk);
+                logger.debug("executing bulk index request with actions: "+bulk.numberOfActions());
                 bulk.execute().actionGet();
             }
         }
@@ -127,7 +128,6 @@ public final class ElasticSearchRepository<T> {
      * TODO: this makes an assumption currently that all of the objects that are indexed across this repository each
      * TODO (cont): have a unique ID. It returns the first result.
      *
-     * @param clazz the class of the object to search for.
      * @param id the ID
      * @return the object, if found
      * @throws ElasticSearchOMGException on error
@@ -143,7 +143,6 @@ public final class ElasticSearchRepository<T> {
     /**
      * Retrieves a list of objects from the elastic search index by their IDs
      *
-     * @param clazz the class of objects to retrieve
      * @param ids the IDs to retrieve on
      * @return the objects, if found
      * @throws ElasticSearchOMGException on error
@@ -158,7 +157,6 @@ public final class ElasticSearchRepository<T> {
             MultiGetResponse response = request.execute().actionGet();
             return (List<T>) getObjectsFromResponse(response);
         } catch (Exception e) {
-            // TODO: this seems to have changed in newer versions of ES, previously I believe ES returned the equivalent of a map of ID -> (exists: false, source: null)
             throw new ElasticSearchOMGException("Error executing multiget for IDs: " + ids, e);
         }
     }
@@ -216,7 +214,6 @@ public final class ElasticSearchRepository<T> {
 
     /**
      * Delete items in the index given a specific query.
-     * @param indexName the name of the index
      * @param queryBuilder the query
      */
     //TODO is requesting indexName the right thing to do?
@@ -262,7 +259,7 @@ public final class ElasticSearchRepository<T> {
     }
 
     /**
-     * Prepares a {@link org.elasticsearch.client.action.search.SearchRequestBuilder} for querying against the elastic search index. The classes provided will
+     * Prepares a {@link SearchRequestBuilder} for querying against the elastic search index. The classes provided will
      * converted into elastic search object types based on the configured mapping
      *
      * @param query   the query to apply to the search
@@ -293,7 +290,6 @@ public final class ElasticSearchRepository<T> {
      * Convenience method
      *
      * @param query   the query to execute
-     * @param classes the classes to allow in the query
      * @return the search request
      */
     protected SearchRequestBuilder prepareSearch(QueryBuilder query) {
@@ -337,7 +333,6 @@ public final class ElasticSearchRepository<T> {
      * Retrieve the JSON object results from elastic search and marshall them into java objects
      *
      * @param response the {@link SearchResponse} from elastic search
-     * @param classes  the types to allow (marshall to)
      * @return the list of unmarshalled objects
      * @throws ElasticSearchOMGException on error
      */
@@ -405,7 +400,6 @@ public final class ElasticSearchRepository<T> {
     /**
      * Create the mapping for a given class.
      *
-     * @param clazz the class
      */
     public void createMapping() {
         try {
@@ -442,11 +436,11 @@ public final class ElasticSearchRepository<T> {
     /**
      * The {@link Client} used to interact with an elastic search cluster
      *
-     * @param client the client
      */
     public Client getClient() {
         return client;
     }
+    
     public void setClient(Client client) {
         this.client = client;
     }
@@ -501,5 +495,34 @@ public final class ElasticSearchRepository<T> {
             indexes.add(ElasticSearchMappingUtil.getIndexName(c));
         }
         return indexes.toArray(new String[0]);
+    }
+
+    /**
+     * Simple method for getting the next id.
+     *
+     * @param object the object to grab the next id for
+     * @return the next id
+     * @throws ElasticSearchOMGException on error
+     */
+    protected String getNextId(Object object)
+            throws ElasticSearchOMGException {
+
+        // grab the next id based on some simple rules, this should be expanded
+        for (Method method : object.getClass().getMethods()) {
+            if (!method.isAnnotationPresent(ElasticSearchDocumentId.class)) {
+                break;
+            }
+
+            ElasticSearchDocumentId docId = method.getAnnotation(ElasticSearchDocumentId.class);
+            try {
+                return docId.autoGenerate()
+                        ? null
+                        : method.invoke(object).toString();
+            } catch (Exception ex) {
+                throw new ElasticSearchOMGException("exception invoking method for id generation.", ex);
+            }
+        }
+
+        return null;
     }
 }

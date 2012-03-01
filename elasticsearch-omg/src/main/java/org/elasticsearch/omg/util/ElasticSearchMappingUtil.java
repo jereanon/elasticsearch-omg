@@ -4,6 +4,9 @@ import org.apache.commons.lang.StringUtils;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.node.ObjectNode;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.omg.ElasticSearchOMGException;
+import org.elasticsearch.omg.support.*;
+import org.elasticsearch.omg.support.index.IndexNameStrategy;
 import org.elasticsearch.omg.support.model.mapping.Mapping;
 import org.elasticsearch.omg.support.model.mapping.MappingProperty;
 import org.springframework.beans.BeanUtils;
@@ -17,9 +20,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
-import org.elasticsearch.omg.ElasticSearchOMGException;
-import org.elasticsearch.omg.support.*;
-import org.elasticsearch.omg.support.index.IndexNameStrategy;
 
 /**
  * Utilities related to creating an elastic search mapping.
@@ -269,7 +269,6 @@ public class ElasticSearchMappingUtil {
     /**
      * Returns the name of the index as provided in the document annotation.
      * 
-     * @param object The class of object being indexed.
      * @return The name of the index to store the object into.
      */
     public static String getIndexName(Class<?> clazz) {
