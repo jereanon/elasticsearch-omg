@@ -1,3 +1,6 @@
+*.swp
+.idea
+*.iml
 /elasticsearch-omg/target/
 /samples/target/
 /integration-tests/target/

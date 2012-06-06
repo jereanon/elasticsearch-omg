@@ -10,7 +10,7 @@
     <context:annotation-config/>
 
     <bean id="esClientFactory"  class="org.elasticsearch.omg.support.springframework.ElasticSearchLocalClientFactory" />
-    <!-- handels @ManagedByRepository annotations and creates ElasticSearchRepository singletons -->
+    <!-- handles @ManagedByRepository annotations and creates ElasticSearchRepository singletons -->
     <bean id="repositorySingletonCreator" class="org.elasticsearch.omg.support.springframework.ElasticSearchRepositoryBeanRegistry">
         <property name="bulkSize" value="50"/>
         <property name="scanPath" value="org.elasticsearch.omg.samples"/>
